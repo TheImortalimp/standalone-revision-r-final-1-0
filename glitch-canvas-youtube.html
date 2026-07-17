@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>standalone revision-R final 1.0</title>
+  <link rel="stylesheet" href="glitch-canvas-youtube.css" />
+</head>
+<body>
+  <main id="stage" aria-label="revision-r-final-player">
+    <video id="mediaLayer" playsinline muted></video>
+    <iframe
+      id="ytFrame"
+      title="YouTube Player"
+      allow="autoplay; encrypted-media; picture-in-picture"
+      referrerpolicy="strict-origin-when-cross-origin"
+    ></iframe>
+    <canvas id="fxCanvas"></canvas>
+  </main>
+
+  <section id="hud" aria-label="controls">
+    <h1>standalone revision-R final 1.0</h1>
+    <div class="row">
+      <input id="ytInput" type="text" placeholder="Paste YouTube URL" autocomplete="off" />
+      <button id="ytStartBtn" type="button">Start YouTube</button>
+    </div>
+    <div class="row">
+      <input id="fileInput" type="file" accept="video/*,audio/*" />
+      <button id="localStartBtn" type="button">Play Local File</button>
+    </div>
+    <div id="status">Baseline: r2 dominant. Subtle overlays: r1, r3, r4.</div>
+    <div id="mixInfo">mix weights => r2:0.78 r1:0.08 r3:0.08 r4:0.06</div>
+  </section>
+
+  <script src="revision-r-final-engine.js"></script>
+</body>
+</html>
