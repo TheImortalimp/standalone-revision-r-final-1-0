@@ -8,8 +8,20 @@ param(
 $ErrorActionPreference = "Stop"
 
 $webUiRoot = Join-Path $RepoRoot "extras\glitch-canvas-player\webui"
-if (-not (Test-Path (Join-Path $webUiRoot "glitch-canvas-youtube.html"))) {
-    throw "Missing web UI root: $webUiRoot"
+$webUiHtml = Join-Path $webUiRoot "glitch-canvas-youtube.html"
+$rootHtml = Join-Path $RepoRoot "glitch-canvas-youtube.html"
+$rootCss = Join-Path $RepoRoot "glitch-canvas-youtube.css"
+$rootJs = Join-Path $RepoRoot "revision-r-final-engine.js"
+$useRootWebUiFallback = $false
+
+if (-not (Test-Path $webUiHtml)) {
+    if ((Test-Path $rootHtml) -and (Test-Path $rootCss) -and (Test-Path $rootJs)) {
+        $useRootWebUiFallback = $true
+        Write-Host "webui folder not found; using repo-root web files as fallback."
+    }
+    else {
+        throw "Missing web UI root: $webUiRoot"
+    }
 }
 
 $iexpressPath = Join-Path $env:WINDIR "System32\iexpress.exe"
@@ -32,7 +44,17 @@ try {
     $payloadRoot = Join-Path $stagingRoot "payload"
     New-Item -ItemType Directory -Force -Path $payloadRoot | Out-Null
 
-    Copy-Item -Path $webUiRoot -Destination (Join-Path $payloadRoot "webui") -Recurse -Force
+    $payloadWebUi = Join-Path $payloadRoot "webui"
+    New-Item -ItemType Directory -Force -Path $payloadWebUi | Out-Null
+
+    if ($useRootWebUiFallback) {
+        Copy-Item -Path $rootHtml -Destination (Join-Path $payloadWebUi "glitch-canvas-youtube.html") -Force
+        Copy-Item -Path $rootCss -Destination (Join-Path $payloadWebUi "glitch-canvas-youtube.css") -Force
+        Copy-Item -Path $rootJs -Destination (Join-Path $payloadWebUi "revision-r-final-engine.js") -Force
+    }
+    else {
+        Copy-Item -Path $webUiRoot -Destination $payloadWebUi -Recurse -Force
+    }
 
     $authorsPath = Join-Path $RepoRoot "AUTHORS.TXT"
     if (Test-Path $authorsPath) {
