@@ -43,7 +43,7 @@ jobs:
           Write-Host "EXE artifact size: $exeSizeMb MB"
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: ${{ inputs.tag }}
           name: standalone revision-R final 1.0 - ${{ inputs.tag }}
