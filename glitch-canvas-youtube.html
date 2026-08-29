@@ -7,31 +7,85 @@
   <link rel="stylesheet" href="glitch-canvas-youtube.css" />
 </head>
 <body>
-  <main id="stage" aria-label="revision-r-final-player">
-    <video id="mediaLayer" playsinline muted></video>
-    <iframe
-      id="ytFrame"
-      title="YouTube Player"
-      allow="autoplay; encrypted-media; picture-in-picture"
-      referrerpolicy="strict-origin-when-cross-origin"
-    ></iframe>
+
+  <!-- ── Init / splash screen ── -->
+  <div id="splash" role="dialog" aria-label="splash screen">
+    <div id="splashInner">
+      <div id="splashLogo" aria-hidden="true">
+        <span class="logo-bracket">[</span>
+        <span class="logo-r">R</span>
+        <span class="logo-bracket">]</span>
+      </div>
+      <h1 id="splashTitle">standalone revision-R final 1.0</h1>
+      <p id="splashSub">VLC-shell · glitch FX · YouTube + local media</p>
+      <button id="splashEnterBtn" type="button" autofocus>Enter Player</button>
+    </div>
+  </div>
+
+  <!-- ── Player stage ── -->
+  <main id="stage" aria-label="revision-r-final-player" hidden>
+
+    <!-- media layers -->
+    <video id="mediaLayer" playsinline></video>
+    <div id="ytFrame"></div>
     <canvas id="fxCanvas"></canvas>
+
+    <!-- open-media overlay (shown when nothing is playing) -->
+    <div id="openOverlay">
+      <div id="openCard">
+        <p class="openLabel">Open source</p>
+
+        <div class="openRow">
+          <label for="ytInput" class="openFieldLabel">YouTube URL</label>
+          <div class="openInputRow">
+            <input id="ytInput" type="text" placeholder="https://www.youtube.com/watch?v=…" autocomplete="off" />
+            <button id="ytLoadBtn" type="button">Load</button>
+          </div>
+        </div>
+
+        <div class="openRow">
+          <label for="fileInput" class="openFieldLabel">Local MP3 / MP4</label>
+          <div class="openInputRow">
+            <label id="fileChooser" tabindex="0">
+              <span id="fileChooserText">Choose file…</span>
+              <input id="fileInput" type="file" accept="video/*,audio/*" tabindex="-1" />
+            </label>
+            <button id="localLoadBtn" type="button">Play</button>
+          </div>
+        </div>
+
+        <div id="statusLine" role="status" aria-live="polite">Ready.</div>
+      </div>
+    </div>
+
+    <!-- ── VLC-style transport bar ── -->
+    <div id="transport" aria-label="transport controls" hidden>
+      <div id="seekRow">
+        <span id="timeElapsed">0:00</span>
+        <input id="seekBar" type="range" min="0" max="1000" value="0" step="1" aria-label="seek" />
+        <span id="timeDuration">0:00</span>
+      </div>
+      <div id="btnRow">
+        <div id="leftBtns">
+          <button id="stopBtn"     type="button" title="Stop"        aria-label="Stop">&#9646;&#9646;</button>
+          <button id="playPauseBtn" type="button" title="Play / Pause" aria-label="Play">&#9654;</button>
+        </div>
+
+        <div id="centerBtns">
+          <button id="openMediaBtn" type="button" title="Open media" aria-label="Open media">&#128194;</button>
+        </div>
+
+        <div id="rightBtns">
+          <span id="volIcon" title="Mute / Unmute" aria-label="volume icon">&#128264;</span>
+          <input id="volBar" type="range" min="0" max="1" value="1" step="0.02" aria-label="volume" />
+          <button id="fullscreenBtn" type="button" title="Fullscreen" aria-label="Fullscreen">&#9974;</button>
+        </div>
+      </div>
+    </div>
+
   </main>
 
-  <section id="hud" aria-label="controls">
-    <h1>standalone revision-R final 1.0</h1>
-    <div class="row">
-      <input id="ytInput" type="text" placeholder="Paste YouTube URL" autocomplete="off" />
-      <button id="ytStartBtn" type="button">Start YouTube</button>
-    </div>
-    <div class="row">
-      <input id="fileInput" type="file" accept="video/*,audio/*" />
-      <button id="localStartBtn" type="button">Play Local File</button>
-    </div>
-    <div id="status">Baseline: r2 dominant. Subtle overlays: r1, r3, r4.</div>
-    <div id="mixInfo">mix weights => r2:0.78 r1:0.08 r3:0.08 r4:0.06</div>
-  </section>
-
+  <!-- YouTube IFrame API loader (injected by engine when needed) -->
   <script src="revision-r-final-engine.js"></script>
 </body>
 </html>
