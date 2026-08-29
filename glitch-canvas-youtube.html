@@ -58,6 +58,24 @@
       </div>
     </div>
 
+    <aside id="fxPanel" class="hidden" aria-label="glitch effects">
+      <div class="fxPanelHead">
+        <span>Glitch layers</span>
+        <label class="fxSwitch" title="Enable glitch effects">
+          <input id="fxEnabled" type="checkbox" checked />
+          <span>On</span>
+        </label>
+      </div>
+      <label class="fxControl" for="fxIntensity">Intensity <output id="fxIntensityValue">65%</output></label>
+      <input id="fxIntensity" type="range" min="0" max="100" value="65" />
+      <label class="fxControl" for="fxJitter">Chroma jitter <output id="fxJitterValue">100%</output></label>
+      <input id="fxJitter" type="range" min="0" max="200" value="100" />
+      <label class="fxControl" for="fxScan">V-Sync scan <output id="fxScanValue">100%</output></label>
+      <input id="fxScan" type="range" min="0" max="200" value="100" />
+      <label class="fxControl" for="fxBloom">Bloom <output id="fxBloomValue">100%</output></label>
+      <input id="fxBloom" type="range" min="0" max="200" value="100" />
+    </aside>
+
     <!-- ── VLC-style transport bar ── -->
     <div id="transport" aria-label="transport controls" hidden>
       <div id="seekRow">
@@ -73,6 +91,7 @@
 
         <div id="centerBtns">
           <button id="openMediaBtn" type="button" title="Open media" aria-label="Open media">&#128194;</button>
+          <button id="fxToggleBtn" type="button" title="Glitch layers" aria-label="Show glitch layers" aria-expanded="false">&#9881;</button>
         </div>
 
         <div id="rightBtns">

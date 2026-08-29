@@ -19,6 +19,14 @@
     mediaMode: "none"   // "none" | "local" | "youtube"
   };
 
+  const fxSettings = {
+    enabled: true,
+    intensity: 0.65,
+    jitter: 1,
+    scan: 1,
+    bloom: 1
+  };
+
   /* ── resize ───────────────────────────────────────────────────── */
   function resize() {
     const w = Math.max(1, Math.floor(window.innerWidth));
@@ -63,8 +71,9 @@
   function drawSourceFrame() {
     if (state.mediaMode !== "local" || mediaLayer.readyState < 2) return;
     const W = canvas.width, H = canvas.height;
-    const dx = Math.sin(state.frame * 0.031) * state.smoothWarp * MAX_DISPLACEMENT;
-    const dy = Math.cos(state.frame * 0.027) * state.smoothWarp * MAX_DISPLACEMENT;
+    const strength = fxSettings.intensity * fxSettings.jitter;
+    const dx = Math.sin(state.frame * 0.031) * state.smoothWarp * MAX_DISPLACEMENT * strength;
+    const dy = Math.cos(state.frame * 0.027) * state.smoothWarp * MAX_DISPLACEMENT * strength;
     ctx.save();
     ctx.globalAlpha = 0.94;
     ctx.filter = "saturate(1.05) contrast(1.04)";
@@ -73,7 +82,7 @@
     const ch = Math.max(0.2, state.smoothJitter * 3.0);
     ctx.save();
     ctx.globalCompositeOperation = "screen";
-    ctx.globalAlpha = 0.07 + state.smoothHue * 0.1;
+    ctx.globalAlpha = (0.07 + state.smoothHue * 0.1) * strength;
     ctx.fillStyle = "rgba(255,80,80,0.45)";  ctx.fillRect(ch,  0, W, H);
     ctx.fillStyle = "rgba(80,160,255,0.3)";  ctx.fillRect(-ch, 0, W, H);
     ctx.restore();
@@ -81,7 +90,7 @@
 
   function drawScanlines() {
     const W = canvas.width, H = canvas.height;
-    const alpha = 0.022 + state.smoothScan * 0.03;
+    const alpha = (0.022 + state.smoothScan * 0.03) * fxSettings.intensity * fxSettings.scan;
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.fillStyle = "#7fdbff";
@@ -94,7 +103,7 @@
     const cx = W * (0.5 + 0.05 * Math.sin(state.frame * 0.0027));
     const cy = H * (0.5 + 0.05 * Math.cos(state.frame * 0.0021));
     const g  = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W, H) * 0.66);
-    const e  = 0.08 + state.smoothBloom * 0.13;
+    const e  = (0.08 + state.smoothBloom * 0.13) * fxSettings.intensity * fxSettings.bloom;
     g.addColorStop(0,    "rgba(114,255,240," + e.toFixed(3) + ")");
     g.addColorStop(0.65, "rgba(243,170,83,"  + (e * 0.55).toFixed(3) + ")");
     g.addColorStop(1,    "rgba(3,8,18,0.44)");
@@ -109,9 +118,11 @@
     resize();
     updateBlend(nowMs);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawSourceFrame();
-    drawScanlines();
-    drawBloom();
+    if (fxSettings.enabled) {
+      drawSourceFrame();
+      drawScanlines();
+      drawBloom();
+    }
     state.frame += 1;
     requestAnimationFrame(render);
   }
@@ -131,6 +142,9 @@
   const openMediaBtn  = document.getElementById("openMediaBtn");
   const openOverlay   = document.getElementById("openOverlay");
   const statusLine    = document.getElementById("statusLine");
+  const fxPanel       = document.getElementById("fxPanel");
+  const fxToggleBtn   = document.getElementById("fxToggleBtn");
+  const fxEnabled     = document.getElementById("fxEnabled");
 
   let seekDragging = false;
 
@@ -155,6 +169,10 @@
 
   function hideOpenOverlay() {
     openOverlay.classList.add("hidden");
+  }
+
+  function syncLocalCanvasPresentation() {
+    document.body.classList.toggle("canvas-local-playback", state.mediaMode === "local" && fxSettings.enabled);
   }
 
   /* ── play/pause icon ──────────────────────────────────────────── */
@@ -201,6 +219,30 @@
     openOverlay.classList.toggle("hidden");
   });
 
+  function bindFxRange(id, setting, outputId) {
+    const input = document.getElementById(id);
+    const output = document.getElementById(outputId);
+    const update = function () {
+      fxSettings[setting] = parseInt(input.value, 10) / 100;
+      output.textContent = input.value + "%";
+    };
+    input.addEventListener("input", update);
+    update();
+  }
+
+  fxToggleBtn.addEventListener("click", function () {
+    const isHidden = fxPanel.classList.toggle("hidden");
+    fxToggleBtn.setAttribute("aria-expanded", String(!isHidden));
+  });
+  fxEnabled.addEventListener("change", function () {
+    fxSettings.enabled = fxEnabled.checked;
+    syncLocalCanvasPresentation();
+  });
+  bindFxRange("fxIntensity", "intensity", "fxIntensityValue");
+  bindFxRange("fxJitter", "jitter", "fxJitterValue");
+  bindFxRange("fxScan", "scan", "fxScanValue");
+  bindFxRange("fxBloom", "bloom", "fxBloomValue");
+
   /* ═══════════════════════════════════════════════════════════════
      LOCAL (HTML5) MEDIA
   ═══════════════════════════════════════════════════════════════ */
@@ -239,6 +281,7 @@
     });
 
     state.mediaMode = "local";
+    syncLocalCanvasPresentation();
     hideOpenOverlay();
     showTransport();
     setStatus("Playing: " + file.name);
@@ -294,6 +337,7 @@
     }
 
     state.mediaMode = "none";
+    document.body.classList.remove("canvas-local-playback");
     seekBar.value = 0;
     timeElapsed.textContent  = "0:00";
     timeDuration.textContent = "0:00";
@@ -462,6 +506,7 @@
 
     stopAll();
     state.mediaMode = "youtube";
+    document.body.classList.remove("canvas-local-playback");
     hideOpenOverlay();
     showTransport();
     setStatus("Loading YouTube…");

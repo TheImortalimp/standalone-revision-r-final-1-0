@@ -154,6 +154,69 @@ html, body {
   pointer-events: none;
 }
 
+body.canvas-local-playback #mediaLayer {
+  visibility: hidden;
+}
+
+#fxPanel {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 20;
+  width: min(260px, calc(100vw - 36px));
+  padding: 14px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: var(--panel);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.38);
+}
+
+#fxPanel.hidden {
+  display: none;
+}
+
+.fxPanelHead,
+.fxControl,
+.fxSwitch {
+  display: flex;
+  align-items: center;
+}
+
+.fxPanelHead {
+  justify-content: space-between;
+  margin-bottom: 12px;
+  color: var(--accent-0);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.fxSwitch {
+  gap: 6px;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.fxControl {
+  justify-content: space-between;
+  margin-top: 10px;
+  color: var(--text-dim);
+  font-size: 0.74rem;
+}
+
+.fxControl output {
+  color: var(--text);
+}
+
+#fxPanel input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent-0);
+}
+
 /* ── open-media overlay ───────────────────────────────────────────── */
 #openOverlay {
   position: absolute;
