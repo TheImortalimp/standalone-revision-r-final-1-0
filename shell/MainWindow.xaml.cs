@@ -20,7 +20,11 @@ public partial class MainWindow : Window
         {
             await PlayerView.EnsureCoreWebView2Async();
 
-            var webUiPath = Path.Combine(AppContext.BaseDirectory, "webui");
+            var webUiPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "webui"));
+            if (!Directory.Exists(webUiPath))
+            {
+                webUiPath = Path.Combine(AppContext.BaseDirectory, "webui");
+            }
             if (!File.Exists(Path.Combine(webUiPath, "glitch-canvas-youtube.html")))
             {
                 MessageBox.Show("The bundled player files are missing.", Title, MessageBoxButton.OK, MessageBoxImage.Error);

@@ -65,6 +65,20 @@ function Invoke-AuthenticodeSigning {
     Write-Host "Authenticode publisher verified: $($signature.SignerCertificate.Subject)"
 }
 
+function Export-LocalPublisherCertificate {
+    param([Parameter(Mandatory = $true)][string]$DestinationPath)
+
+    if ([string]::IsNullOrWhiteSpace($SigningCertificateThumbprint)) {
+        return
+    }
+
+    $certificate = Get-ChildItem -Path "Cert:\CurrentUser\My\$SigningCertificateThumbprint" -ErrorAction SilentlyContinue
+    if (-not $certificate) {
+        throw "Code-signing certificate not found in Cert:\CurrentUser\My: $SigningCertificateThumbprint"
+    }
+    Export-Certificate -Cert $certificate -FilePath $DestinationPath -Force | Out-Null
+}
+
 $webUiRoot = Join-Path $RepoRoot "extras\glitch-canvas-player\webui"
 $webUiHtml = Join-Path $webUiRoot "glitch-canvas-youtube.html"
 $rootHtml = Join-Path $RepoRoot "glitch-canvas-youtube.html"
@@ -139,6 +153,7 @@ try {
     } | ConvertTo-Json -Depth 4
 
     Set-Content -Path (Join-Path $payloadRoot "build-manifest.json") -Value $manifest -Encoding UTF8
+    Export-LocalPublisherCertificate -DestinationPath (Join-Path $payloadRoot "publisher.cer")
 
     $installScriptPath = Join-Path $payloadRoot "install.ps1"
     $installScript = @'

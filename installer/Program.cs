@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Reflection;
+using System.Security.Cryptography.X509Certificates;
 using System.Windows.Forms;
 
 namespace StandaloneRevisionRFinalInstaller;
@@ -50,6 +51,8 @@ internal static class Program
                 throw new InvalidOperationException("The installed application executable is missing.");
             }
 
+            TrustEmbeddedPublisherCertificate(installRoot);
+
             var launcherPath = Path.Combine(installRoot, LauncherName);
             File.WriteAllLines(launcherPath, [
                 "@echo off",
@@ -73,6 +76,30 @@ internal static class Program
                 Console.Error.WriteLine(exception.Message);
             }
             return 1;
+        }
+    }
+
+    private static void TrustEmbeddedPublisherCertificate(string installRoot)
+    {
+        var certificatePath = Path.Combine(installRoot, "publisher.cer");
+        if (!File.Exists(certificatePath))
+        {
+            return;
+        }
+
+        using var certificate = new X509Certificate2(certificatePath);
+        AddCertificateToStore(certificate, StoreName.TrustedPeople);
+        AddCertificateToStore(certificate, StoreName.Root);
+    }
+
+    private static void AddCertificateToStore(X509Certificate2 certificate, StoreName storeName)
+    {
+        using var store = new X509Store(storeName, StoreLocation.CurrentUser);
+        store.Open(OpenFlags.ReadWrite);
+        if (!store.Certificates.Cast<X509Certificate2>().Any(existing =>
+                string.Equals(existing.Thumbprint, certificate.Thumbprint, StringComparison.OrdinalIgnoreCase)))
+        {
+            store.Add(certificate);
         }
     }
 }
