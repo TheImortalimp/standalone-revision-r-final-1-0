@@ -2,10 +2,68 @@ param(
     [string]$RepoRoot = (Get-Location).Path,
     [string]$OutputDir = "extras\glitch-canvas-player\dist",
     [int]$TargetMaxMb = 75,
-    [int]$HardFailMb = 100
+    [int]$HardFailMb = 100,
+    [string]$SigningCertificateThumbprint = $env:SRF_SIGNING_CERT_THUMBPRINT,
+    [string]$SigningCertificatePath = $env:SRF_SIGNING_CERT_PATH,
+    [string]$SigningCertificatePassword = $env:SRF_SIGNING_CERT_PASSWORD,
+    [string]$SignToolPath = $env:SRF_SIGNTOOL_PATH
 )
 
 $ErrorActionPreference = "Stop"
+
+function Invoke-AuthenticodeSigning {
+    param([Parameter(Mandatory = $true)][string]$FilePath)
+
+    if (-not [string]::IsNullOrWhiteSpace($SigningCertificateThumbprint)) {
+        $certificate = Get-ChildItem -Path "Cert:\CurrentUser\My\$SigningCertificateThumbprint" -ErrorAction SilentlyContinue
+        if (-not $certificate -or -not $certificate.HasPrivateKey) {
+            throw "Code-signing certificate not found in Cert:\CurrentUser\My: $SigningCertificateThumbprint"
+        }
+
+        $signature = Set-AuthenticodeSignature -FilePath $FilePath -Certificate $certificate -HashAlgorithm SHA256
+        if ($signature.Status -ne "Valid") {
+            throw "Certificate-store signing failed for ${FilePath}: $($signature.Status)"
+        }
+        Write-Host "Authenticode publisher verified: $($certificate.Subject)"
+        return
+    }
+
+    if ([string]::IsNullOrWhiteSpace($SigningCertificatePath)) {
+        Write-Host "Authenticode signing skipped: configure SRF_SIGNING_CERT_THUMBPRINT or SRF_SIGNING_CERT_PATH."
+        return
+    }
+
+    if (-not (Test-Path $SigningCertificatePath)) {
+        throw "Signing certificate not found: $SigningCertificatePath"
+    }
+
+    if ([string]::IsNullOrWhiteSpace($SignToolPath)) {
+        $signTool = Get-Command signtool.exe -ErrorAction SilentlyContinue
+        if ($signTool) {
+            $SignToolPath = $signTool.Source
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($SignToolPath) -or -not (Test-Path $SignToolPath)) {
+        throw "signtool.exe is required to sign releases. Set SRF_SIGNTOOL_PATH to its full path."
+    }
+
+    $signArguments = @("sign", "/fd", "SHA256", "/tr", "http://timestamp.digicert.com", "/td", "SHA256", "/f", $SigningCertificatePath)
+    if (-not [string]::IsNullOrWhiteSpace($SigningCertificatePassword)) {
+        $signArguments += @("/p", $SigningCertificatePassword)
+    }
+    $signArguments += $FilePath
+    & $SignToolPath @signArguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "Authenticode signing failed for $FilePath."
+    }
+
+    $signature = Get-AuthenticodeSignature -FilePath $FilePath
+    if ($signature.Status -ne "Valid") {
+        throw "Signature verification failed for ${FilePath}: $($signature.Status)"
+    }
+    Write-Host "Authenticode publisher verified: $($signature.SignerCertificate.Subject)"
+}
 
 $webUiRoot = Join-Path $RepoRoot "extras\glitch-canvas-player\webui"
 $webUiHtml = Join-Path $webUiRoot "glitch-canvas-youtube.html"
@@ -24,11 +82,6 @@ if (-not (Test-Path $webUiHtml)) {
     }
 }
 
-$iexpressPath = Join-Path $env:WINDIR "System32\iexpress.exe"
-if (-not (Test-Path $iexpressPath)) {
-    throw "IExpress not found at $iexpressPath"
-}
-
 $resolvedOutputDir = Join-Path $RepoRoot $OutputDir
 New-Item -ItemType Directory -Force -Path $resolvedOutputDir | Out-Null
 
@@ -39,10 +92,23 @@ $exeArtifactPath = Join-Path $resolvedOutputDir $exeArtifactName
 
 $stagingRoot = Join-Path $env:TEMP ("srf1_" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force -Path $stagingRoot | Out-Null
+$installerPayloadPath = $null
 
 try {
     $payloadRoot = Join-Path $stagingRoot "payload"
     New-Item -ItemType Directory -Force -Path $payloadRoot | Out-Null
+
+    $shellProject = Join-Path $RepoRoot "shell\StandaloneRevisionRFinal.csproj"
+    if (-not (Test-Path $shellProject)) {
+        throw "Native shell project not found: $shellProject"
+    }
+
+    $payloadApp = Join-Path $payloadRoot "app"
+    & dotnet publish $shellProject --configuration Release --runtime win-x64 --self-contained false --output $payloadApp
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $payloadApp "StandaloneRevisionRFinal.exe"))) {
+        throw "Native shell publish failed."
+    }
+    Invoke-AuthenticodeSigning -FilePath (Join-Path $payloadApp "StandaloneRevisionRFinal.exe")
 
     $payloadWebUi = Join-Path $payloadRoot "webui"
     New-Item -ItemType Directory -Force -Path $payloadWebUi | Out-Null
@@ -63,6 +129,8 @@ try {
 
     $manifest = @{
         name = "standalone revision-R final 1.0"
+        publisherLegalName = "River Lyle Reuveni"
+        publisherGitHub = "TheImortalimp"
         baseline = "r2"
         subtleLayers = @("r1", "r3", "r4")
         generatedAtUtc = [DateTime]::UtcNow.ToString("o")
@@ -75,7 +143,7 @@ try {
     $installScriptPath = Join-Path $payloadRoot "install.ps1"
     $installScript = @'
 param(
-    [string]$InstallRoot = "$env:USERPROFILE\Desktop\standalone-revision-R-final-1.0"
+        [string]$InstallRoot = (Join-Path ([Environment]::GetFolderPath("Desktop")) "standalone-revision-R-final-1.0")
 )
 
 $ErrorActionPreference = "Stop"
@@ -99,21 +167,21 @@ $webuiTarget = Join-Path $InstallRoot "webui"
 New-Item -ItemType Directory -Force -Path $webuiTarget | Out-Null
 Copy-Item -Path (Join-Path $sourceRoot "webui\*") -Destination $webuiTarget -Recurse -Force
 
+$appTarget = Join-Path $InstallRoot "app"
+New-Item -ItemType Directory -Force -Path $appTarget | Out-Null
+Copy-Item -Path (Join-Path $sourceRoot "app\*") -Destination $appTarget -Recurse -Force
+
 $launcher = Join-Path $InstallRoot "Launch-Standalone-Revision-R-Final.cmd"
 $launcherLines = @(
     "@echo off",
     "setlocal",
     "set BASE=%~dp0",
-    "set PAGE=%BASE%webui\glitch-canvas-youtube.html",
-    "if exist \"C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe\" (",
-    "  start \"\" \"C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe\" \"%PAGE%\"",
-    "  exit /b 0",
+    "set APP=%BASE%app\StandaloneRevisionRFinal.exe",
+    "if not exist \"%APP%\" (",
+    "  echo Application files are missing: %APP%",
+    "  exit /b 1",
     ")",
-    "if exist \"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe\" (",
-    "  start \"\" \"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe\" \"%PAGE%\"",
-    "  exit /b 0",
-    ")",
-    "start \"\" \"%PAGE%\""
+    "start \"\" \"%APP%\""
 )
 Set-Content -Path $launcher -Value $launcherLines -Encoding ASCII
 
@@ -126,71 +194,26 @@ Write-Host "Installed to: $InstallRoot"
     $zipSizeBytes = (Get-Item $zipArtifactPath).Length
     $zipSizeMb = [Math]::Round($zipSizeBytes / 1MB, 2)
 
-    $sourceFiles = @(
-        "AUTHORS.TXT",
-        "build-manifest.json",
-        "install.ps1",
-        "webui\glitch-canvas-youtube.html",
-        "webui\glitch-canvas-youtube.css",
-        "webui\revision-r-final-engine.js"
-    )
-
-    $sourceCabinetRoot = Join-Path $stagingRoot "payload"
-    $sedPath = Join-Path $stagingRoot "build-installer.sed"
-    $targetEscaped = $exeArtifactPath -replace '\\', '\\\\'
-    $sourceEscaped = $sourceCabinetRoot -replace '\\', '\\\\'
-
-    $sedLines = @(
-        "[Version]",
-        "Class=IEXPRESS",
-        "SEDVersion=3",
-        "",
-        "[Options]",
-        "PackagePurpose=InstallApp",
-        "ShowInstallProgramWindow=0",
-        "HideExtractAnimation=1",
-        "UseLongFileName=1",
-        "InsideCompressed=0",
-        "CAB_FixedSize=0",
-        "CAB_ResvCodeSigning=0",
-        "RebootMode=N",
-        "InstallPrompt=",
-        "DisplayLicense=",
-        "FinishMessage=Standalone Revision-R Final 1.0 extracted.",
-        "TargetName=$targetEscaped",
-        "FriendlyName=Standalone Revision-R Final 1.0 Installer",
-        "AppLaunched=powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1",
-        "PostInstallCmd=<None>",
-        "AdminQuietInstCmd=",
-        "UserQuietInstCmd=",
-        "SourceFiles=SourceFiles",
-        "",
-        "[Strings]"
-    )
-
-    for ($index = 0; $index -lt $sourceFiles.Count; $index++) {
-        $key = "FILE$index"
-        $value = $sourceFiles[$index]
-        $sedLines += "$key=$value"
+    $installerProject = Join-Path $RepoRoot "installer\StandaloneRevisionRFinalInstaller.csproj"
+    if (-not (Test-Path $installerProject)) {
+        throw "Installer project not found: $installerProject"
     }
 
-    $sedLines += ""
-    $sedLines += "[SourceFiles]"
-    $sedLines += "SourceFiles0=$sourceEscaped"
-    $sedLines += ""
-    $sedLines += "[SourceFiles0]"
+    $installerPayloadPath = Join-Path (Split-Path -Parent $installerProject) "payload.zip"
+    Copy-Item -Path $zipArtifactPath -Destination $installerPayloadPath -Force
 
-    for ($index = 0; $index -lt $sourceFiles.Count; $index++) {
-        $key = "FILE$index"
-        $sedLines += "%$key%="
+    $installerOutput = Join-Path $stagingRoot "installer"
+    & dotnet publish $installerProject --configuration Release --output $installerOutput
+    if ($LASTEXITCODE -ne 0) {
+        throw "Installer publish failed with exit code $LASTEXITCODE."
     }
 
-    Set-Content -Path $sedPath -Value $sedLines -Encoding ASCII
-
-    & $iexpressPath /N /Q $sedPath | Out-Null
-    if (-not (Test-Path $exeArtifactPath)) {
-        throw "Installer EXE was not created: $exeArtifactPath"
+    $publishedInstaller = Join-Path $installerOutput "StandaloneRevisionRFinalInstaller.exe"
+    if (-not (Test-Path $publishedInstaller)) {
+        throw "Published installer EXE was not created: $publishedInstaller"
     }
+    Copy-Item -Path $publishedInstaller -Destination $exeArtifactPath -Force
+    Invoke-AuthenticodeSigning -FilePath $exeArtifactPath
 
     $exeSizeBytes = (Get-Item $exeArtifactPath).Length
     $exeSizeMb = [Math]::Round($exeSizeBytes / 1MB, 2)
@@ -219,6 +242,9 @@ Write-Host "Installed to: $InstallRoot"
     Write-Host "Build successful within cap ($TargetMaxMb MB) for ZIP and EXE."
 }
 finally {
+    if ($installerPayloadPath -and (Test-Path $installerPayloadPath)) {
+        Remove-Item -Path $installerPayloadPath -Force -ErrorAction SilentlyContinue
+    }
     if (Test-Path $stagingRoot) {
         Remove-Item -Path $stagingRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
