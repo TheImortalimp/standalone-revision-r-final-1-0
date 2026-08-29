@@ -155,6 +155,19 @@ try {
     Set-Content -Path (Join-Path $payloadRoot "build-manifest.json") -Value $manifest -Encoding UTF8
     Export-LocalPublisherCertificate -DestinationPath (Join-Path $payloadRoot "publisher.cer")
 
+    $launcherName = "Launch-Standalone-Revision-R-Final.cmd"
+    $launcherLines = @(
+        "@echo off",
+        "setlocal",
+        "set APP=%~dp0app\StandaloneRevisionRFinal.exe",
+        'if not exist "%APP%" (',
+        "  echo Application files are missing: %APP%",
+        "  exit /b 1",
+        ")",
+        'start "" "%APP%"'
+    )
+    Set-Content -Path (Join-Path $payloadRoot $launcherName) -Value $launcherLines -Encoding ASCII
+
     $installScriptPath = Join-Path $payloadRoot "install.ps1"
     $installScript = @'
 param(
@@ -168,7 +181,8 @@ New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
 $sourceRoot = Split-Path -Parent $PSCommandPath
 $files = @(
     "AUTHORS.TXT",
-    "build-manifest.json"
+    "build-manifest.json",
+    "Launch-Standalone-Revision-R-Final.cmd"
 )
 
 foreach ($file in $files) {
@@ -185,20 +199,6 @@ Copy-Item -Path (Join-Path $sourceRoot "webui\*") -Destination $webuiTarget -Rec
 $appTarget = Join-Path $InstallRoot "app"
 New-Item -ItemType Directory -Force -Path $appTarget | Out-Null
 Copy-Item -Path (Join-Path $sourceRoot "app\*") -Destination $appTarget -Recurse -Force
-
-$launcher = Join-Path $InstallRoot "Launch-Standalone-Revision-R-Final.cmd"
-$launcherLines = @(
-    "@echo off",
-    "setlocal",
-    "set BASE=%~dp0",
-    "set APP=%BASE%app\StandaloneRevisionRFinal.exe",
-    "if not exist \"%APP%\" (",
-    "  echo Application files are missing: %APP%",
-    "  exit /b 1",
-    ")",
-    "start \"\" \"%APP%\""
-)
-Set-Content -Path $launcher -Value $launcherLines -Encoding ASCII
 
 Write-Host "Installed to: $InstallRoot"
 '@
