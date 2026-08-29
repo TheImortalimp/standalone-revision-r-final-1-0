@@ -1,4 +1,5 @@
 using Microsoft.Web.WebView2.Core;
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 
@@ -18,14 +19,21 @@ public partial class MainWindow : Window
     {
         try
         {
-            await PlayerView.EnsureCoreWebView2Async();
+            var userDataPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "TheImortalimp",
+                "StandaloneRevisionRFinal",
+                "WebView2");
+            Directory.CreateDirectory(userDataPath);
+            var environment = await CoreWebView2Environment.CreateAsync(null, userDataPath);
+            await PlayerView.EnsureCoreWebView2Async(environment);
 
             var webUiPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "webui"));
             if (!Directory.Exists(webUiPath))
             {
                 webUiPath = Path.Combine(AppContext.BaseDirectory, "webui");
             }
-            if (!File.Exists(Path.Combine(webUiPath, "glitch-canvas-youtube.html")))
+            if (!File.Exists(Path.Combine(webUiPath, "glitch-canvas-v-sync.html")))
             {
                 MessageBox.Show("The bundled player files are missing.", Title, MessageBoxButton.OK, MessageBoxImage.Error);
                 Close();
@@ -38,11 +46,13 @@ public partial class MainWindow : Window
                 CoreWebView2HostResourceAccessKind.DenyCors);
             PlayerView.CoreWebView2.NewWindowRequested += BlockNewWindows;
             PlayerView.CoreWebView2.NavigationStarting += RestrictTopLevelNavigation;
-            PlayerView.CoreWebView2.Navigate($"https://{AppHost}/glitch-canvas-youtube.html");
+            PlayerView.CoreWebView2.Navigate($"https://{AppHost}/glitch-canvas-v-sync.html");
         }
         catch (Exception exception)
         {
-            MessageBox.Show($"Unable to start the YouTube player shell.\n\n{exception.Message}", Title, MessageBoxButton.OK, MessageBoxImage.Error);
+            var diagnosticPath = Path.Combine(AppContext.BaseDirectory, "startup-error.log");
+            File.WriteAllText(diagnosticPath, exception.ToString());
+            MessageBox.Show($"Unable to start the media player shell.\n\n{exception.Message}", Title, MessageBoxButton.OK, MessageBoxImage.Error);
             Close();
         }
     }
@@ -62,6 +72,12 @@ public partial class MainWindow : Window
 
         var host = uri.Host.ToLowerInvariant();
         var isAppPage = uri.Scheme == Uri.UriSchemeHttps && host == AppHost;
+        if (uri.Scheme == Uri.UriSchemeHttps && host == "www.imortalimp.nl")
+        {
+            eventArgs.Cancel = true;
+            Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
+            return;
+        }
         var isYouTube = uri.Scheme == Uri.UriSchemeHttps &&
             (host == "youtube.com" || host.EndsWith(".youtube.com", StringComparison.Ordinal) || host == "youtu.be");
         eventArgs.Cancel = !isAppPage && !isYouTube;

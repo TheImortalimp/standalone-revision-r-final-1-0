@@ -84,10 +84,12 @@ $webUiHtml = Join-Path $webUiRoot "glitch-canvas-youtube.html"
 $rootHtml = Join-Path $RepoRoot "glitch-canvas-youtube.html"
 $rootCss = Join-Path $RepoRoot "glitch-canvas-youtube.css"
 $rootJs = Join-Path $RepoRoot "revision-r-final-engine.js"
+$vSyncHtml = Join-Path $RepoRoot "glitch-canvas-v-sync.html"
+$vSyncCss = Join-Path $RepoRoot "glitch-canvas-v-sync.css"
 $useRootWebUiFallback = $false
 
 if (-not (Test-Path $webUiHtml)) {
-    if ((Test-Path $rootHtml) -and (Test-Path $rootCss) -and (Test-Path $rootJs)) {
+    if ((Test-Path $rootHtml) -and (Test-Path $rootCss) -and (Test-Path $rootJs) -and (Test-Path $vSyncHtml) -and (Test-Path $vSyncCss)) {
         $useRootWebUiFallback = $true
         Write-Host "webui folder not found; using repo-root web files as fallback."
     }
@@ -131,6 +133,8 @@ try {
         Copy-Item -Path $rootHtml -Destination (Join-Path $payloadWebUi "glitch-canvas-youtube.html") -Force
         Copy-Item -Path $rootCss -Destination (Join-Path $payloadWebUi "glitch-canvas-youtube.css") -Force
         Copy-Item -Path $rootJs -Destination (Join-Path $payloadWebUi "revision-r-final-engine.js") -Force
+        Copy-Item -Path $vSyncHtml -Destination (Join-Path $payloadWebUi "glitch-canvas-v-sync.html") -Force
+        Copy-Item -Path $vSyncCss -Destination (Join-Path $payloadWebUi "glitch-canvas-v-sync.css") -Force
     }
     else {
         Copy-Item -Path $webUiRoot -Destination $payloadWebUi -Recurse -Force
