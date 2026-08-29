@@ -27,7 +27,7 @@
 }
 #suggestedVideo, #suggestedPlaylist, #suggestedVideo2, #suggestedVideo3, #testCanvas, #suggestedYoutube, #suggestedFractals,
 #ytInput, #startBtn, #openFileBtn, #randomizeBtn, #autoGlitchBtn, #continualRandomizeBtn,
-#aiWarpBtn, #ghostProtocolBtn, #sliderContainer, #preset-toggle-btn, #preset-dropdown-container,
+#aiWarpBtn, #ghostProtocolBtn, #vsyncScanBtn, #sliderContainer, #preset-toggle-btn, #preset-dropdown-container,
 #wired-btn {
   transition: opacity 0.2s ease-in-out;
 }
@@ -65,6 +65,7 @@ body:not(.ui-controls-hover) #autoGlitchBtn,
 body:not(.ui-controls-hover) #continualRandomizeBtn,
 body:not(.ui-controls-hover) #aiWarpBtn,
 body:not(.ui-controls-hover) #ghostProtocolBtn,
+body:not(.ui-controls-hover) #vsyncScanBtn,
 body:not(.ui-controls-hover) #sliderContainer,
 body:not(.ui-controls-hover) #preset-toggle-btn,
 body:not(.ui-controls-hover) #preset-dropdown-container,
@@ -82,6 +83,7 @@ body.ui-controls-hover #autoGlitchBtn,
 body.ui-controls-hover #continualRandomizeBtn,
 body.ui-controls-hover #aiWarpBtn,
 body.ui-controls-hover #ghostProtocolBtn,
+body.ui-controls-hover #vsyncScanBtn,
 body.ui-controls-hover #sliderContainer,
 body.ui-controls-hover #preset-toggle-btn,
 body.ui-controls-hover #preset-dropdown-container,
@@ -326,6 +328,96 @@ body.ui-controls-hover #wired-btn {
     #ghostProtocolBtn.active {
       background: rgba(0,255,255,0.18);
       box-shadow: 0 0 22px rgba(102,252,241,0.35);
+    }
+    /* --- Ghost Protocol + V-Sync Scan share one bottom-left rack --- */
+    #ghostBtnRack {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      right: auto;
+      z-index: 3100;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 12px;
+      max-width: calc(100vw - 40px);
+    }
+    #ghostBtnRack .wired-button {
+      position: static !important;
+      margin: 0;
+      flex: 0 1 auto;
+      min-width: 0;
+      max-width: 100%;
+      white-space: nowrap;
+    }
+    #vsyncScanBtn {
+      display: block;
+      width: auto;
+      min-width: 120px;
+      max-width: calc(100vw - 40px);
+      padding: 6px 8px;
+      font-size: 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(102,252,241,0.9);
+      background: rgba(0,0,0,0.75);
+      color: #66fcf1;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      box-shadow: 0 0 18px rgba(102,252,241,0.18);
+      transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+    }
+    #vsyncScanBtn:hover {
+      transform: translateY(-1px);
+      background: rgba(0,255,255,0.14);
+    }
+    #vsyncScanBtn.active {
+      background: rgba(0,255,255,0.18);
+      box-shadow: 0 0 22px rgba(102,252,241,0.35);
+    }
+    /* Ghost-synced state: V-Sync Scan borrows the Ghost Protocol palette. */
+    #vsyncScanBtn.ghost-synced {
+      border-color: rgba(186,140,255,0.9);
+      color: #d9b3ff;
+      box-shadow: 0 0 18px rgba(186,140,255,0.3), inset 0 0 12px rgba(186,140,255,0.15);
+      text-shadow: 0 0 4px #b06cff, 0 0 8px #b06cff;
+    }
+    #vsyncScanBtn.active.ghost-synced {
+      background: rgba(120,80,220,0.22);
+      animation: crt-flicker 0.2s infinite, vsync-sync-pulse 1.6s ease-in-out infinite;
+    }
+    @keyframes vsync-sync-pulse {
+      0%, 100% { box-shadow: 0 0 14px rgba(160,120,255,0.4), inset 0 0 10px rgba(160,120,255,0.2); }
+      50%      { box-shadow: 0 0 26px rgba(120,200,255,0.6), inset 0 0 16px rgba(120,200,255,0.3); }
+    }
+    /* Hard-off latch: switched off and locked — no automatic effect can
+       bring the V-Sync Scan back until the user toggles it on again. */
+    #vsyncScanBtn.hard-off {
+      border-color: rgba(255,96,96,0.85);
+      color: #ff8f8f;
+      box-shadow: 0 0 12px rgba(255,96,96,0.25), inset 0 0 8px rgba(120,0,0,0.3);
+      text-shadow: 0 0 4px rgba(255,110,110,0.7);
+      opacity: 0.92;
+    }
+    #vsyncScanBtn.hard-off:hover {
+      background: rgba(120,0,0,0.25);
+      box-shadow: 0 0 16px rgba(255,96,96,0.4), inset 0 0 10px rgba(120,0,0,0.35);
+    }
+    /* Colour-ghost badge: hard-off is still latched (geometry stays dead)
+       but the FREE slider is running the ghost-protocol colour ghosting. */
+    #vsyncScanBtn.hard-off.ghost-color {
+      border-color: rgba(216,160,255,0.92);
+      color: #f0ccff;
+      box-shadow: 0 0 18px rgba(190,120,255,0.45), inset 0 0 12px rgba(120,40,180,0.35);
+      text-shadow: 0 0 6px rgba(216,160,255,0.9);
+      animation: vsyncGhostColorPulse 2.2s ease-in-out infinite;
+      opacity: 1;
+    }
+    @keyframes vsyncGhostColorPulse {
+      0%, 100% { box-shadow: 0 0 12px rgba(190,120,255,0.32), inset 0 0 8px rgba(120,40,180,0.26); }
+      50%      { box-shadow: 0 0 24px rgba(205,155,255,0.6),  inset 0 0 14px rgba(150,80,220,0.38); }
+    }
+    #vsyncScanSlider {
+      accent-color: #4de1ff;
     }
     #sliderContainer {
       position: absolute;
@@ -924,6 +1016,7 @@ body.ui-controls-hover #wired-btn {
   body.ui-hidden #continualRandomizeBtn,
   body.ui-hidden #aiWarpBtn,
   body.ui-hidden #ghostProtocolBtn,
+  body.ui-hidden #vsyncScanBtn,
   body.ui-hidden #sliderContainer,
   body.ui-hidden #preset-toggle-btn,
   body.ui-hidden #preset-dropdown-container,
@@ -938,6 +1031,7 @@ body.ui-controls-hover #wired-btn {
   /* Final Test UI overrides: smaller buttons + wider slider bars */
   #sliderContainer,
   #ghostProtocolBtn,
+  #vsyncScanBtn,
   #preset-toggle-btn,
   #toggle-ui-btn,
   #randomizeBtn,
@@ -1163,9 +1257,15 @@ body.playback-on #wired-btn {
   font-size: clamp(11px, 1.4vw, 18px) !important;
 }
 
-body.playback-on #ghostProtocolBtn {
+body.playback-on #ghostBtnRack {
   bottom: 12px !important;
   left: 12px !important;
+  max-width: calc(100vw - 24px) !important;
+  gap: 10px !important;
+}
+
+body.playback-on #ghostProtocolBtn,
+body.playback-on #vsyncScanBtn {
   max-width: calc(100vw - 24px) !important;
   font-size: clamp(8px, 1vw, 10px) !important;
   padding: 4px 8px !important;
@@ -1261,15 +1361,8 @@ body.playback-on #aiWarpBtn {
   cursor: text !important;
 }
 
-/* Native app skin: retain the V-Sync engine while matching the prior player shell. */
-:root {
-  --shell-panel: rgba(8, 14, 28, 0.9);
-  --shell-border: rgba(102, 247, 255, 0.3);
-  --shell-cyan: #66f7ff;
-  --shell-amber: #f3aa53;
-  --shell-text: #e9f4ff;
-  --shell-muted: #7fa8c8;
-}
+body.ui-hidden #ghostBtnRack { display: none !important; }
+body:not(.welcome-dismissed):not(.playback-on) #openFileWrap { display: none !important; }
 
 #welcomeScreen {
   position: fixed;
@@ -1277,12 +1370,11 @@ body.playback-on #aiWarpBtn {
   z-index: 20000;
   display: grid;
   place-items: center;
-  color: var(--shell-text);
+  color: #e9f4ff;
   background: radial-gradient(ellipse at 50% 30%, rgba(102, 247, 255, 0.1), transparent 60%), linear-gradient(160deg, #06090f, #0d1526);
 }
 
-#welcomeScreen.welcomeExit { animation: welcomeFade 420ms ease forwards; }
-@keyframes welcomeFade { to { opacity: 0; pointer-events: none; } }
+#welcomeScreen[hidden] { display: none !important; }
 
 .welcomePanel {
   display: flex;
@@ -1291,17 +1383,17 @@ body.playback-on #aiWarpBtn {
   align-items: center;
   gap: 16px;
   padding: 40px;
-  border: 1px solid var(--shell-border);
+  border: 1px solid rgba(102, 247, 255, 0.3);
   border-radius: 8px;
-  background: var(--shell-panel);
+  background: rgba(8, 14, 28, 0.9);
   box-shadow: 0 0 80px rgba(102, 247, 255, 0.08), 0 24px 48px rgba(0, 0, 0, 0.5);
   text-align: center;
 }
 
-.welcomeMark { color: var(--shell-cyan); font-size: 3.6rem; font-weight: 900; line-height: 1; text-shadow: 0 0 24px rgba(102, 247, 255, 0.5); }
-.welcomeMark span { color: var(--shell-amber); }
-.welcomePanel h1 { color: var(--shell-cyan); font-family: "Segoe UI", Tahoma, Verdana, sans-serif; font-size: 1.05rem; letter-spacing: 0.12em; text-transform: uppercase; }
-.welcomePanel p { color: var(--shell-muted); font-family: "Segoe UI", Tahoma, Verdana, sans-serif; font-size: 0.8rem; letter-spacing: 0.06em; }
+.welcomeMark { color: #66f7ff; font-size: 3.6rem; font-weight: 900; line-height: 1; text-shadow: 0 0 24px rgba(102, 247, 255, 0.5); }
+.welcomeMark span { color: #f3aa53; }
+.welcomePanel h1 { color: #66f7ff; font-family: "Segoe UI", Tahoma, Verdana, sans-serif; font-size: 1.05rem; letter-spacing: 0.12em; text-transform: uppercase; }
+.welcomePanel p { color: #7fa8c8; font-family: "Segoe UI", Tahoma, Verdana, sans-serif; font-size: 0.8rem; letter-spacing: 0.06em; }
 
 #welcomeEnterBtn {
   position: static;
@@ -1310,66 +1402,10 @@ body.playback-on #aiWarpBtn {
   border: 0;
   border-radius: 8px;
   color: #080b12;
-  background: linear-gradient(90deg, var(--shell-cyan), var(--shell-amber));
+  background: linear-gradient(90deg, #66f7ff, #f3aa53);
   font-family: "Segoe UI", Tahoma, Verdana, sans-serif;
   font-size: 0.95rem;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-}
-
-body.playback-on #sliderContainer,
-body.playback-on #preset-dropdown-container {
-  border-color: var(--shell-border) !important;
-  border-radius: 8px !important;
-  background: var(--shell-panel) !important;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.38) !important;
-}
-
-body.playback-on #randomizeBtn,
-body.playback-on #autoGlitchBtn,
-body.playback-on #continualRandomizeBtn,
-body.playback-on #aiWarpBtn,
-body.playback-on #preset-toggle-btn,
-body.playback-on #toggle-ui-btn,
-body.playback-on #wired-btn,
-#protocolDock .wired-button {
-  border: 1px solid var(--shell-border) !important;
-  border-radius: 8px !important;
-  color: var(--shell-text) !important;
-  background: var(--shell-panel) !important;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3) !important;
-  text-shadow: none !important;
-}
-
-body.playback-on #sliderContainer input[type="range"] { accent-color: var(--shell-cyan); }
-
-#protocolDock {
-  position: fixed;
-  left: 16px;
-  bottom: 16px;
-  z-index: 3100;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  max-width: calc(100vw - 32px);
-}
-
-#protocolDock #ghostProtocolBtn,
-#protocolDock #vsyncScanBtn {
-  position: static !important;
-  display: block !important;
-  min-width: 0;
-  max-width: min(42vw, 260px);
-  margin: 0;
-  padding: 7px 10px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-@media (max-width: 640px) {
-  #protocolDock { left: 10px; bottom: 10px; gap: 6px; }
-  #protocolDock #ghostProtocolBtn,
-  #protocolDock #vsyncScanBtn { max-width: calc(50vw - 16px); font-size: 9px !important; }
 }

@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Standalone Revision-R Final</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='black'/%3E%3Cpath d='M14 32h36' stroke='lime' stroke-width='6' stroke-linecap='round'/%3E%3Cpath d='M22 20l-8 12 8 12' stroke='white' stroke-width='5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M42 20l8 12-8 12' stroke='white' stroke-width='5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="glitch-canvas-v-sync.css">
   <script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
 <script src="https://www.youtube.com/iframe_api"></script>
@@ -15,7 +14,7 @@
       <div class="welcomeMark" aria-hidden="true"><span>[</span>R<span>]</span></div>
       <h1>V-Sync Initialization</h1>
       <p>standalone revision-R final · glitch canvas media player</p>
-      <button id="welcomeEnterBtn" type="button" autofocus>Enter Player</button>
+      <button id="welcomeEnterBtn" type="button" autofocus onclick="document.getElementById('welcomeScreen').hidden = true; document.body.classList.add('welcome-dismissed');">Enter Player</button>
     </div>
   </section>
   <svg width="0" height="0" class="background-svg">
@@ -75,9 +74,9 @@
 <button id="autoGlitchBtn" class="wired-button">Auto Glitch: OFF</button>
 <button id="continualRandomizeBtn" class="wired-button">Continual Randomization: OFF</button>
 <button id="aiWarpBtn" class="wired-button">AI Video Warp: OFF</button>
-<div id="protocolDock">
+<div id="ghostBtnRack">
   <button id="ghostProtocolBtn" class="wired-button ghost-protocol-button">GHOST PROTOCOL: OFF</button>
-  <button id="vsyncScanBtn" class="wired-button vsync-scan-button">V-SYNC SCAN: OFF</button>
+  <button id="vsyncScanBtn" class="wired-button vsync-scan-button" title="TV simulator · vertical scan-phasing">V-SYNC SCAN: OFF</button>
 </div>
 
 <!-- Container for individual alpha sliders -->
@@ -87,7 +86,7 @@
     <input type="range" min="0" max="1" step="0.01" value="1" id="ghostProtocolSlider">
   </div>
   <div class="slider-group">
-    <label for="vsyncScanSlider">V-Sync Scan:</label>
+    <label for="vsyncScanSlider" id="vsyncScanLabel">V-Sync Scan:</label>
     <input type="range" min="0" max="1" step="0.01" value="0.6" id="vsyncScanSlider">
   </div>
   <div class="slider-group">
@@ -99,19 +98,6 @@
 
 
 <script>
-  (function () {
-    const welcomeScreen = document.getElementById('welcomeScreen');
-    const enterButton = document.getElementById('welcomeEnterBtn');
-    const enterPlayer = function () {
-      welcomeScreen.classList.add('welcomeExit');
-      welcomeScreen.addEventListener('animationend', function () { welcomeScreen.remove(); }, { once: true });
-    };
-    enterButton.addEventListener('click', enterPlayer);
-    welcomeScreen.addEventListener('keydown', function (event) {
-      if (event.key === 'Enter' || event.key === ' ') enterPlayer();
-    });
-  })();
-
 const glitchCanvas = document.getElementById('glitchCanvas');
 const gctx = glitchCanvas.getContext('2d');
 const ghostCanvas = document.createElement('canvas');
@@ -350,9 +336,20 @@ let ghostProtocolActive = false;
 let ghostProtocolLevel = parseFloat(ghostProtocolSlider?.value ?? 1);
 const vsyncScanBtn = document.getElementById('vsyncScanBtn');
 const vsyncScanSlider = document.getElementById('vsyncScanSlider');
+const vsyncScanLabel = document.getElementById('vsyncScanLabel');
 let vsyncScanActive = false;
 let vsyncScanLevel = parseFloat(vsyncScanSlider?.value ?? 0.6);
 let vsyncScanRandomTarget = vsyncScanLevel;
+// Hard-off latch: once the user switches V-Sync Scan OFF (button click or
+// slider to 0), no automatic system (continual randomization, zoom bursts,
+// Randomize, presets, ...) may raise the TV effect again. Only manual input
+// re-arms it. While latched, the slider is FREE and drives the manual-only
+// COLOUR V-SYNC GHOST dial instead of the TV geometry.
+let vsyncScanHardOff = false;
+// Manual-only colour ghost level (used in hard-off mode; never touched by
+// any automatic system). Reconstructs the Ghost Protocol colour treatment:
+// hue-cycled palette per mode, RGB vertical afterimages, phosphor wash.
+let vsyncGhostColorLevel = 0;
 
 // UI Toggle elements
 const uiToggleTab = document.getElementById('ui-toggle-tab');
@@ -717,8 +714,13 @@ function sanitizeContinualRandomizationState(now = performance.now()) {
   masterOpacity = ensureFiniteUnitInterval(masterOpacity, 0.82);
   ghostProtocolLevel = ensureFiniteUnitInterval(ghostProtocolLevel, 0.2);
   ghostProtocolRandomTarget = ensureFiniteUnitInterval(ghostProtocolRandomTarget, ghostProtocolLevel);
-  vsyncScanLevel = ensureFiniteUnitInterval(vsyncScanLevel, 0.25);
-  vsyncScanRandomTarget = ensureFiniteUnitInterval(vsyncScanRandomTarget, vsyncScanLevel);
+  if (vsyncScanHardOff) {
+    vsyncScanLevel = 0; // Hard-off latch wins over the sanitizer.
+    vsyncScanRandomTarget = 0;
+  } else {
+    vsyncScanLevel = ensureFiniteUnitInterval(vsyncScanLevel, 0.25);
+    vsyncScanRandomTarget = ensureFiniteUnitInterval(vsyncScanRandomTarget, vsyncScanLevel);
+  }
   youtubeIframeVisibility = ensureFiniteUnitInterval(youtubeIframeVisibility, 1);
   youtubeIframeVisibilityTarget = ensureFiniteUnitInterval(youtubeIframeVisibilityTarget, youtubeIframeVisibility);
 
@@ -806,7 +808,13 @@ function retargetContinualRandomization(now = performance.now()) {
 
   ghostProtocolRandomTarget = getDistantTarget(ghostProtocolLevel ?? 0.2, 0.24, 0.62, 0.08);
   // V-Sync Scan rides the Ghost Protocol band: same window, same tempo family, so the two breathe together.
-  vsyncScanRandomTarget = getDistantTarget(vsyncScanLevel ?? 0.25, 0.22, 0.6, 0.06);
+  // Hard-off latch: never retarget it back to life while the user has it switched off.
+  if (vsyncScanHardOff) {
+    vsyncScanLevel = 0;
+    vsyncScanRandomTarget = 0;
+  } else {
+    vsyncScanRandomTarget = getDistantTarget(vsyncScanLevel ?? 0.25, 0.22, 0.6, 0.06);
+  }
   youtubeIframeVisibilityTarget = getDistantTarget(youtubeIframeVisibility ?? 1, 0.86, 0.97, 0.02);
   ghostInterpolationTempo = {
     rise: 0.22 + Math.random() * 0.14,
@@ -1029,30 +1037,69 @@ updateGhostProtocolUi();
 
 function updateVsyncScanUi() {
   vsyncScanActive = vsyncScanLevel > 0.01;
+  // In hard-off the slider is FREE and drives the colour ghost dial.
+  if (vsyncScanLabel) {
+    vsyncScanLabel.textContent = vsyncScanHardOff ? 'V-Sync Colour Ghost:' : 'V-Sync Scan:';
+  }
+  if (vsyncScanSlider) {
+    vsyncScanSlider.value = (vsyncScanHardOff ? vsyncGhostColorLevel : vsyncScanLevel).toFixed(3);
+    vsyncScanSlider.style.accentColor = vsyncScanHardOff ? '#c99bff' : '#4de1ff';
+  }
   if (!vsyncScanBtn) return;
   vsyncScanBtn.classList.toggle('active', vsyncScanActive);
+  // Hard-off latch visual: a switched-off status with no active glow.
+  vsyncScanBtn.classList.toggle('hard-off', !vsyncScanActive && vsyncScanHardOff);
+  // Colour-ghost badge while latched: the ghost palette is live.
+  vsyncScanBtn.classList.toggle('ghost-color', vsyncScanHardOff && vsyncGhostColorLevel > 0.01);
   if (vsyncScanActive) {
     vsyncScanBtn.classList.toggle('ghost-synced', ghostProtocolActive);
+    vsyncScanBtn.title = 'TV simulator · vertical scan-phasing';
   } else {
     vsyncScanBtn.classList.remove('ghost-synced');
+    vsyncScanBtn.title = vsyncScanHardOff
+      ? 'Hard OFF: TV geometry disabled. The slider is free and drives COLOUR V-SYNC GHOSTING only — no automatic effect can touch it or re-arm the TV fault. Click to re-arm.'
+      : 'TV simulator · vertical scan-phasing';
   }
   vsyncScanBtn.textContent = vsyncScanActive
     ? `V-SYNC SCAN: ON (${Math.round(vsyncScanLevel * 100)}%)`
-    : 'V-SYNC SCAN: OFF';
+    : (vsyncScanHardOff
+        ? (vsyncGhostColorLevel > 0.01
+            ? `V-SYNC SCAN: HARD OFF · GHOST ${Math.round(vsyncGhostColorLevel * 100)}%`
+            : 'V-SYNC SCAN: HARD OFF')
+        : 'V-SYNC SCAN: OFF');
 }
 
 function toggleVsyncScan() {
-  // OFF -> reset to a healthy mid-level; otherwise just toggle the effect.
-  vsyncScanLevel = vsyncScanLevel <= 0.01 ? 0.6 : 0;
-  if (vsyncScanSlider) vsyncScanSlider.value = vsyncScanLevel;
+  if (vsyncScanLevel <= 0.01) {
+    // Power ON: clear the hard-off latch and return to a healthy level.
+    vsyncScanHardOff = false;
+    vsyncScanLevel = 0.6;
+  } else {
+    // Power OFF (hard): latch on so nothing automatic can re-enable it.
+    // The slider becomes free for the manual colour-ghost dial (from 0).
+    vsyncScanHardOff = true;
+    vsyncScanLevel = 0;
+    vsyncGhostColorLevel = 0;
+  }
   vsyncScanRandomTarget = vsyncScanLevel; // Sync target to prevent auto-randomizer jumps.
   updateVsyncScanUi();
 }
 
 if (vsyncScanSlider) {
   vsyncScanSlider.addEventListener('input', (event) => {
-    vsyncScanLevel = parseFloat(event.target.value);
-    vsyncScanRandomTarget = vsyncScanLevel; // Manual input wins over the random target.
+    const v = parseFloat(event.target.value);
+    if (vsyncScanHardOff) {
+      // FREE slider: colour v-sync ghosting only, manual-only (nothing
+      // automatic reads or writes this value).
+      vsyncGhostColorLevel = v;
+    } else {
+      vsyncScanLevel = v;
+      vsyncScanRandomTarget = v; // Manual input wins over the random target.
+      // Manual control always wins: dragging above 0 disarms the hard-off
+      // latch; dragging all the way to 0 (re)arms it with a fresh ghost dial.
+      vsyncScanHardOff = !(v > 0.01);
+      if (vsyncScanHardOff) vsyncGhostColorLevel = 0;
+    }
     updateVsyncScanUi();
   });
 }
@@ -2551,18 +2598,36 @@ function applyYouTubeWarpMotion(currentTime, hueStrength = 0) {
   const surfaces = [ytWarpShell, ytFrame, iframe].filter(Boolean);
 
   if (!isAiWarpActive) {
+    // Reset unconditionally: the warp-transform cache is stale the moment
+    // warp turns off, and a cached reset would leave the V-Sync roll
+    // frozen on the video. This path only runs on toggles, so it is cheap.
     const resetTransform = 'translate3d(0, 0, 0) scale(1) skew(0deg, 0deg)';
-    if (domRenderCache.surfacesResetTransform !== resetTransform) {
-      surfaces.forEach((surface) => {
-        surface.style.transform = resetTransform;
-        surface.style.transformOrigin = '50% 50%';
-      });
-      domRenderCache.surfacesResetTransform = resetTransform;
-    }
+    surfaces.forEach((surface) => {
+      surface.style.transform = resetTransform;
+      surface.style.transformOrigin = '50% 50%';
+    });
+    domRenderCache.surfacesResetTransform = resetTransform;
+    domRenderCache.warpShellTransform = null;
+    domRenderCache.ytFrameTransform = null;
+    domRenderCache.iframeTransform = null;
+    updateVsyncScanOverlay(currentTime); // Hide the V-Sync DOM ghost when warp is off.
     return;
   }
 
   const t = currentTime * 0.001;
+
+  // TV vertical scan-phasing ghost: when V-Sync Scan is awake, the same
+  // signal that tears the canvas ALSO rolls the YouTube surface, so AI
+  // Warp carries the full V-Sync mix (roll, hum, tear jitter and snaps).
+  const vsyncState = vsyncScanLevel > 0.01
+    ? computeVsyncScanState(currentTime, Math.min(1, vsyncScanLevel * 1.35))
+    : null;
+  const rollActive = !!vsyncState && vsyncState.rollActive;
+  const rollY = vsyncState ? Math.floor(vsyncState.rollOffsetFrac * (window.innerHeight || 720) * 0.85) : 0;
+  const rollScale = rollActive ? 1.09 : 1;
+  const rollDir = vsyncState ? (vsyncState.rollDir || 1) : 1;
+  const tearX = rollActive ? Math.sin(t * 21) * 2.4 * Math.min(1, vsyncScanLevel) : 0;
+
   const liquidDriftX = Math.sin(t * 0.34) * 4.5 + Math.sin(t * 0.11 + 0.8) * 2.8;
   const liquidDriftY = Math.cos(t * 0.28 + 1.1) * 3.2;
   const shellSkewX = Math.sin(t * 0.42 + Math.cos(t * 0.18)) * 1.2;
@@ -2588,7 +2653,7 @@ function applyYouTubeWarpMotion(currentTime, hueStrength = 0) {
     const frameScaleY = 1.012 - Math.sin(t * 0.51 + 0.2) * 0.008;
     const frameSkewX = Math.sin(t * 0.95 + 0.4) * 0.85;
     const frameSkewY = Math.cos(t * 0.71 + 1.1) * 0.45;
-    const transform = `translate3d(${frameWaveX.toFixed(3)}px, ${frameWaveY.toFixed(3)}px, 0) scale(${frameScaleX.toFixed(4)}, ${frameScaleY.toFixed(4)}) skew(${frameSkewX.toFixed(3)}deg, ${frameSkewY.toFixed(3)}deg)`;
+    const transform = `translate3d(${frameWaveX.toFixed(3)}px, ${(frameWaveY + rollY).toFixed(3)}px, 0) scale(${(frameScaleX * rollScale).toFixed(4)}, ${(frameScaleY * rollScale).toFixed(4)}) skew(${frameSkewX.toFixed(3)}deg, ${(frameSkewY + (rollActive ? rollDir * 0.4 : 0)).toFixed(3)}deg)`;
     if (domRenderCache.ytFrameTransform !== transform) {
       ytFrame.style.transformOrigin = '50% 50%';
       ytFrame.style.transform = transform;
@@ -2603,11 +2668,137 @@ function applyYouTubeWarpMotion(currentTime, hueStrength = 0) {
     const innerScaleY = 1.02 - Math.cos(t * 0.72) * 0.012 - hueStrength * 0.007;
     const innerSkewX = Math.sin(t * 1.62 + 0.4) * 1.3;
     const innerSkewY = Math.cos(t * 0.84 + 1.2) * 0.75;
-    const transform = `translate3d(${innerWaveX.toFixed(3)}px, ${innerWaveY.toFixed(3)}px, 0) scale(${innerScaleX.toFixed(4)}, ${innerScaleY.toFixed(4)}) skew(${innerSkewX.toFixed(3)}deg, ${innerSkewY.toFixed(3)}deg)`;
+    const transform = `translate3d(${(innerWaveX + tearX).toFixed(3)}px, ${(innerWaveY - rollY * 0.12).toFixed(3)}px, 0) scale(${(innerScaleX * rollScale).toFixed(4)}, ${(innerScaleY * rollScale).toFixed(4)}) skew(${(innerSkewX + (rollActive ? rollDir * 0.3 : 0)).toFixed(3)}deg, ${innerSkewY.toFixed(3)}deg)`;
     if (domRenderCache.iframeTransform !== transform) {
       iframe.style.transformOrigin = '50% 50%';
       iframe.style.transform = transform;
       domRenderCache.iframeTransform = transform;
+    }
+  }
+
+  // Keep the V-Sync DOM ghost in step with the canvas effect.
+  updateVsyncScanOverlay(currentTime);
+}
+
+/* --- AI Warp × V-Sync Scan: YouTube-surface TV ghost ----------------
+   A DOM overlay lives inside ytWarpShell and mirrors the canvas
+   V-Sync Scan (it reads the SAME computed state), so when AI Warp and
+   V-Sync Scan are both ON, the moving vertical-hold fault — blanking
+   band, scan lines and phosphor tint — is ghosted onto the actual
+   YouTube picture as well. The band glows ghost-violet/cyan to match. */
+let vsyncOverlay = null;
+const vsyncOverlayCache = { visible: false, bandVisible: null, bandY: -1, lineY: -1, hue: -1, roll: -1, h: 0, hAt: 0 };
+
+function ensureVsyncOverlay() {
+  if (vsyncOverlay) return vsyncOverlay;
+  if (!ytWarpShell) return null;
+  const overlay = document.createElement('div');
+  overlay.id = 'vsync-scan-overlay';
+  const band = document.createElement('div');
+  band.className = 'vscan-band';
+  const lines = document.createElement('div');
+  lines.className = 'vscan-lines';
+  const tint = document.createElement('div');
+  tint.className = 'vscan-tint';
+  Object.assign(overlay.style, {
+    position: 'absolute',
+    top: '0', left: '0',
+    width: '100%', height: '100%',
+    pointerEvents: 'none',
+    zIndex: '50',
+    overflow: 'hidden',
+    display: 'none'
+  });
+  band.style.cssText = 'position:absolute;left:0;right:0;top:-18%;height:18%;'
+    + 'background:linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.35) 22%, rgba(0,0,0,0.72) 46%, rgba(6,6,8,0.88) 52%, rgba(0,0,0,0.35) 78%, rgba(0,0,0,0) 100%);'
+    + 'will-change:transform;';
+  lines.style.cssText = 'position:absolute;inset:0;opacity:0.3;mix-blend-mode:screen;'
+    + 'background-image:repeating-linear-gradient(0deg, hsla(190,80%,60%,0.35) 0 1px, rgba(0,0,0,0) 1px 9px);'
+    + 'background-size:100% 9px;will-change:background-position;';
+  tint.style.cssText = 'position:absolute;inset:0;opacity:0.16;mix-blend-mode:soft-light;'
+    + 'background:linear-gradient(180deg, hsla(195,90%,60%,0.9) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,0) 70%, hsla(195,90%,60%,0.55) 100%);';
+  overlay.appendChild(band);
+  overlay.appendChild(lines);
+  overlay.appendChild(tint);
+  overlay.band = band;
+  overlay.lines = lines;
+  overlay.tint = tint;
+  // ytWarpShell is already absolutely positioned (CSS), so it acts as the
+  // containing block; the overlay inherits its clipping and stacking.
+  ytWarpShell.appendChild(overlay);
+  vsyncOverlay = overlay;
+  return overlay;
+}
+
+function updateVsyncScanOverlay(now) {
+  const overlay = ensureVsyncOverlay();
+  if (!overlay) return;
+  // Hard-off keeps the geometry dead but lets the FREE colour-ghost dial
+  // paint a colour-only ghost over the YouTube picture (AI Warp on).
+  const colourGhost = vsyncScanHardOff && vsyncGhostColorLevel > 0.01;
+  const on = isAiWarpActive && (vsyncScanLevel > 0.01 || colourGhost);
+  if (!on) {
+    if (vsyncOverlayCache.visible) {
+      overlay.style.display = 'none';
+      vsyncOverlayCache.visible = false;
+    }
+    return;
+  }
+  const level = Math.min(1, (vsyncScanHardOff ? vsyncGhostColorLevel : vsyncScanLevel) * 1.35);
+  const vsyncState = computeVsyncScanState(now, level);
+  if (!vsyncOverlayCache.visible) {
+    overlay.style.display = 'block';
+    vsyncOverlayCache.visible = true;
+  }
+  // Refresh the cached pixel height a couple of times a second.
+  if (now - vsyncOverlayCache.hAt > 2000) {
+    vsyncOverlayCache.h = overlay.clientHeight || window.innerHeight || 720;
+    vsyncOverlayCache.hAt = now;
+  }
+  const viewH = vsyncOverlayCache.h;
+  if (!viewH) return;
+  // Blanking band sweeps with the scan head — geometry only in normal mode.
+  if (vsyncScanHardOff) {
+    if (vsyncOverlayCache.bandVisible !== false) {
+      overlay.band.style.display = 'none';
+      vsyncOverlayCache.bandVisible = false;
+    }
+  } else {
+    if (vsyncOverlayCache.bandVisible !== true) {
+      overlay.band.style.display = 'block';
+      vsyncOverlayCache.bandVisible = true;
+    }
+    const bandKey = ((-0.18 + vsyncState.scanPos * 1.18) * viewH).toFixed(1);
+    if (vsyncOverlayCache.bandY !== bandKey) {
+      vsyncOverlayCache.bandY = bandKey;
+      overlay.band.style.transform = `translateY(${bandKey}px)`;
+    }
+  }
+  // Fine scan lines roll with the band (colour-only when hard-off).
+  const lineKey = ((vsyncState.scanPos * 940) % 9).toFixed(2);
+  if (vsyncOverlayCache.lineY !== lineKey) {
+    vsyncOverlayCache.lineY = lineKey;
+    overlay.lines.style.backgroundPosition = `0 ${lineKey}px`;
+  }
+  // Hue follows the ghost palette when Ghost Protocol is up.
+  const hueKey = Math.round(vsyncState.scanHue);
+  if (vsyncOverlayCache.hue !== hueKey) {
+    vsyncOverlayCache.hue = hueKey;
+    const tintLight = vsyncState.ghostSync > 0 ? 46 : 60;
+    overlay.lines.style.backgroundImage = `repeating-linear-gradient(0deg, hsla(${hueKey},85%,60%,0.35) 0 1px, rgba(0,0,0,0) 1px 9px)`;
+    overlay.tint.style.background = `linear-gradient(180deg, hsla(${hueKey},90%,${tintLight}%,0.9) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,0) 70%, hsla(${hueKey},90%,${tintLight}%,0.55) 100%)`;
+  }
+  // Roll flare: lines + tint run hot while the raster is out of lock
+  // (normal mode only — hard-off pins the geometry off by design).
+  const rollKey = vsyncScanHardOff ? 0 : (vsyncState.rollActive ? 1 : 0);
+  if (vsyncOverlayCache.roll !== rollKey) {
+    vsyncOverlayCache.roll = rollKey;
+    if (vsyncScanHardOff) {
+      overlay.lines.style.opacity = (Math.min(0.5, 0.1 + level * 0.45)).toFixed(3);
+      overlay.tint.style.opacity = (Math.min(0.4, 0.06 + level * 0.3)).toFixed(3);
+    } else {
+      overlay.lines.style.opacity = rollKey ? '0.52' : '0.3';
+      overlay.tint.style.opacity = rollKey ? '0.3' : '0.16';
     }
   }
 }
@@ -2713,9 +2904,37 @@ function captureCanvasSnapshot(targetCanvas) {
   ctx.drawImage(glitchCanvas, 0, 0, targetCanvas.width, targetCanvas.height);
 }
 
+/* Shared TV vertical-hold synthesizer.
+   Returns the phase / roll / scan state used by BOTH the canvas
+   V-Sync Scan and the AI-Warp YouTube-surface ghost, so the two
+   layers always move as one signal: same hum, same roll, same snap. */
+function computeVsyncScanState(now, level) {
+  const t = now * 0.001;
+  const hum14ms = Math.sin(t * 62.832); // 50Hz mains ripple (Europe).
+  const humAmp = 0.015 + level * 0.045;
+  const phase = Math.sin(t * 1.35) * 0.22 + Math.cos(t * 0.53) * 0.11 + hum14ms * humAmp;
+  const rollActive = phase < -0.03 && Math.sin(t * 0.9 + 1.3) > -0.1;
+  const rollDir = phase >= 0 ? 1 : -1;
+  const rollSpeedHz = (0.05 + level * 0.12) * rollDir;
+  const rollPhase = rollActive ? ((t * rollSpeedHz) % 1) : 0;
+  const snapGate = rollActive ? Math.floor(t * 12) % 8 : 0;
+  const rollOffsetFrac = (snapGate === 0 || !rollActive) ? 0 : rollPhase * 0.35;
+  const scanSpeedHz = 0.22 + level * 0.3;
+  const scanWobble = Math.sin(t * 0.23) * 0.06 + Math.cos(t * 0.11 + 1.2) * 0.04;
+  const scanPos = ((t * scanSpeedHz + scanWobble) % 1 + 1) % 1;
+  const ghostIsOn = getGhostProtocolMode() !== 'OFF' && ghostProtocolActive && ghostProtocolLevel > 0.01;
+  const ghostSync = ghostIsOn ? clamp01(ghostProtocolLevel * 1.2) : 0;
+  const scanHue = ghostIsOn
+    ? ((175 + Math.sin(t * 1.2) * 18) % 360)
+    : (195 + Math.sin(t * 0.7) * 16);
+  return { t, phase, rollActive, rollDir, rollOffsetFrac, scanPos, ghostIsOn, ghostSync, scanHue };
+}
+
 /* ------------------------------------------------------------------
-   V-SYNC SCAN
-   Vertical sync tear + scan-phase drift.
+   V-SYNC SCAN — TV-simulator vertical scan-phasing
+   A vertical-hold fault on a misframed CRT: scanning blanking head,
+   quantized tear slices, picture roll + pull-down snaps, 50Hz mains
+   hum, subcarrier shimmer and phosphor bleed.
    - Derived from the GHOST PROTOCOL frame snapshot (the untouched
      background, below every active overlay), so it tears the actual
      artwork instead of fighting the other glitch effects.
@@ -2723,6 +2942,10 @@ function captureCanvasSnapshot(targetCanvas) {
      hue-rotate of the ghost palette, so it reads as the same signal.
    - Tempo (interpolation + burst) is shared with the Ghost Protocol
      so the two rise, slam and decay together during randomization.
+   - HARD OFF + free slider: the TV geometry is latched off, and the
+     slider becomes the manual-only COLOUR V-SYNC GHOST dial (see
+     renderVsyncColorGhost) — a colour-only ghosting pass rebuilt from
+     the Ghost Protocol colour pipeline.
    ------------------------------------------------------------------ */
 function renderVsyncScan(now, baseSnapshot) {
   if (!(vsyncScanLevel > 0.01)) return;
@@ -2730,34 +2953,25 @@ function renderVsyncScan(now, baseSnapshot) {
 
   const width = glitchCanvas.width;
   const height = glitchCanvas.height;
-  const t = now * 0.001;
   const level = Math.min(1, vsyncScanLevel * 1.35);
   const globalFade = clamp01(0.08 + masterOpacity * 0.24); // Respect the global slider without vanishing.
   if (!(level > 0.01) || !(globalFade > 0)) return;
 
-  // Sweeping scan bar: a smooth, deterministic wander (it can snap to any
-  // frame instantly, which matters while the canvas backgrounds drift).
-  const scanSpeedHz = 0.22 + level * 0.3; // 0.2–0.5Hz vertical hold wander.
-  const scanWobble = Math.sin(t * 0.23) * 0.06 + Math.cos(t * 0.11 + 1.2) * 0.04;
-  const scanPos = (t * scanSpeedHz + scanWobble) % 1;
-  const scanY = Math.floor(scanPos * height);
-  const scanThickness = Math.max(1, Math.floor(height * 0.008)); // ~0.8% of the frame.
-
-  // Ghost-sync tint: when the Ghost Protocol is running, borrow its
-  // phosphor hue and glow so the two effects blend into one texture.
-  const ghostMode = getGhostProtocolMode();
-  const ghostIsOn = ghostMode !== 'OFF' && ghostProtocolActive && ghostProtocolLevel > 0.01;
-  const ghostSync = ghostIsOn ? clamp01(ghostProtocolLevel * 1.2) : 0;
-  const scanGradientHue = ghostIsOn
-    ? ((175 + Math.sin(t * 1.2) * 18) % 360)
-    : (195 + Math.sin(t * 0.7) * 16);
-
-  // Scan phase offset rides the same wander family as the ghost smear.
-  const phase = Math.sin(t * 1.35) * 0.22 + Math.cos(t * 0.53) * 0.11;
-
-  // The tear direction flips with the phase so slices roll both ways;
-  // near-zero phase slips land within 1px, which reads as sync jitter.
+  // Shared TV vertical-hold state. The SAME signal also rolls the
+  // YouTube surface in applyYouTubeWarpMotion, so the canvas tear and
+  // the AI-Warp picture ghost hum, roll and snap together.
+  const vsyncState = computeVsyncScanState(now, level);
+  const t = vsyncState.t;
+  const phase = vsyncState.phase;
+  const rollActive = vsyncState.rollActive;
+  const rollOffset = Math.floor(vsyncState.rollOffsetFrac * height);
   const flipDir = phase >= 0 ? 1 : -1;
+  const ghostIsOn = vsyncState.ghostIsOn;
+  const ghostSync = vsyncState.ghostSync;
+  const scanGradientHue = vsyncState.scanHue;
+
+  const scanY = Math.floor(vsyncState.scanPos * height);
+  const scanThickness = Math.max(1, Math.floor(height * 0.008)); // ~0.8% of the frame.
 
   let sweepAlpha = 0.05 + level * 0.16;
   if (ghostIsOn) sweepAlpha *= 1.3;
@@ -2767,20 +2981,30 @@ function renderVsyncScan(now, baseSnapshot) {
   let lineAlpha = 0.05 + level * 0.32;
   if (ghostIsOn) lineAlpha *= 1.2;
 
-  const phosphorAlpha = Math.min(0.16, 0.02 + level * 0.1 + ghostSync * 0.06);
+  const phosphorAlpha = Math.min(0.2, 0.02 + level * 0.1 + ghostSync * 0.06 + (rollActive ? 0.035 : 0));
 
   gctx.save();
 
-  // Layer 1 — sweeping scan bar (blanking head).
+  // Layer 1 — sweeping scan bar (blanking head). In TV mode the head
+  // gets a harder blanking core plus a faint tracking-burr echo above.
   {
+    const tvHead = rollActive ? 1.55 : 1;
     const grad = gctx.createLinearGradient(0, scanY - scanThickness * 4, 0, scanY + scanThickness * 4);
     grad.addColorStop(0, 'rgba(0, 0, 0, 0)');
     grad.addColorStop(0.5, 'hsla(0, 0%, 8%, 1)');
     grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
     gctx.globalCompositeOperation = 'source-over';
-    gctx.globalAlpha = sweepAlpha * globalFade;
+    gctx.globalAlpha = Math.min(0.5, sweepAlpha * globalFade * tvHead);
     gctx.fillStyle = grad;
     gctx.fillRect(0, scanY - scanThickness * 4, width, scanThickness * 8);
+    // Tracking burr: thin displaced echo of the head (VCR head-switching).
+    if (rollActive) {
+      const burrOff = scanThickness * 14;
+      gctx.globalCompositeOperation = 'screen';
+      gctx.globalAlpha = Math.min(0.16, sweepAlpha * globalFade * 0.45);
+      gctx.fillStyle = `hsla(${scanGradientHue}, 85%, 62%, 1)`;
+      gctx.fillRect(0, scanY - burrOff, width, Math.max(1, scanThickness));
+    }
   }
 
   // Layer 2 — quantized vertical-tear slices (deep side of the band).
@@ -2798,9 +3022,27 @@ function renderVsyncScan(now, baseSnapshot) {
       const dir = flipDir * (up ? -1 : 1); // Up-slips read as a vertical-hold pull; down-slips as a tear.
       const amp = (3 + Math.random() * 14) * level * (0.6 + Math.random() * 0.9);
       const x = dir * amp * phase;
+      // Picture roll: slide the source row so the whole raster appears
+      // to roll through the band until the snap gate re-locks it.
+      const srcY = (y - rollOffset + height) % height;
       gctx.globalCompositeOperation = 'source-over';
       gctx.globalAlpha = lineAlpha * globalFade;
-      gctx.drawImage(baseSnapshot, 0, y, width, sh, x, y, width, sh);
+      gctx.drawImage(baseSnapshot, 0, srcY, width, sh, x, y, width, sh);
+    }
+  }
+
+  if (rollActive) {
+    // Layer 2c — NTSC-style subcarrier shimmer: fine 1px rows bleeding
+    // color along the roll band, like a chroma beat on a misframed set.
+    const rowGap = 2 + Math.floor(level * 2);
+    for (let y = scanY - scanThickness * 10; y < scanY + scanThickness * 10; y += rowGap) {
+      if (y < 0 || y >= height) continue;
+      const a = (0.025 + Math.random() * 0.05) * level * globalFade;
+      if (!(a > 0.004)) continue;
+      gctx.globalCompositeOperation = 'soft-light';
+      gctx.globalAlpha = a;
+      gctx.fillStyle = `hsla(${scanGradientHue + 14 + Math.sin(t * 8.4 + y * 0.11) * 12}, 95%, 60%, 1)`;
+      gctx.fillRect(0, y, width, 1);
     }
   }
 
@@ -2839,6 +3081,92 @@ function renderVsyncScan(now, baseSnapshot) {
     const pulse = 0.6 + 0.4 * Math.abs(Math.sin(timeMs * 0.0012 + 0.7));
     return Math.max(2, Math.round((2 + str * 7) * pulse));
   }
+}
+
+/* ------------------------------------------------------------------
+   COLOUR V-SYNC GHOST (hard-off mode, slider FREE)
+   Reconstructs the colour treatment of the Ghost Protocol colour pass:
+   the same hue-cycled palette (per mode), saturate/contrast cross,
+   blurred RGB afterimages, curve toning and the cyan phosphor wash —
+   but oriented VERTICALLY to the V-Sync phase, so the picture ghosts
+   itself in colour along the scan line. Manual-only: driven by
+   vsyncGhostColorLevel, never touched by automatic systems. */
+function renderVsyncColorGhost(now, baseSnapshot) {
+  if (!vsyncScanHardOff) return;
+  if (!(vsyncGhostColorLevel > 0.01)) return;
+  if (!baseSnapshot || baseSnapshot.width !== glitchCanvas.width || baseSnapshot.height !== glitchCanvas.height) return;
+
+  const width = glitchCanvas.width;
+  const height = glitchCanvas.height;
+  const t = now * 0.001;
+  const ghost = Math.min(1, vsyncGhostColorLevel * 1.35);
+  const globalFade = clamp01(0.08 + masterOpacity * 0.24);
+  if (!(globalFade > 0)) return;
+
+  // Ghost Protocol colour palette per mode (first-edit values).
+  const ghostMode = getGhostProtocolMode();
+  const palette = {
+    OFF:      { hueA: 120, hueB: 70, sat: 1.35, crt: 0.25, glow: 175 },
+    SPECTRUM: { hueA: 120, hueB: 70, sat: 1.3,  crt: 0.25, glow: 175 },
+    CRT:      { hueA: 55,  hueB: 25, sat: 0.85, crt: 0.55, glow: 175 },
+    PLASMA:   { hueA: 180, hueB: 95, sat: 1.8,  crt: 0.25, glow: 175 }
+  }[ghostMode] || { hueA: 120, hueB: 70, sat: 1.35, crt: 0.25, glow: 175 };
+
+  const hueDeg = (Math.sin(t * 0.8) * palette.hueA + Math.cos(t * 0.33) * palette.hueB + 190 + 360) % 360;
+  // Vertical ghost drift: the afterimages slide along the V-Sync phase.
+  const phaseY = (Math.sin(t * 1.35) * 0.03 + Math.cos(t * 0.53) * 0.012) * height * (0.4 + ghost);
+  const baseStrength = Math.min(1, ghost);
+
+  // Tinted pass on the ghost fx buffer (same pipeline as Ghost Protocol).
+  ghostFxCtx.save();
+  ghostFxCtx.clearRect(0, 0, width, height);
+  ghostFxCtx.globalCompositeOperation = 'source-over';
+  ghostFxCtx.globalAlpha = 1;
+  ghostFxCtx.filter = `grayscale(${palette.crt}) hue-rotate(${hueDeg.toFixed(2)}deg) saturate(${1.1 + baseStrength * palette.sat}) contrast(${1 + baseStrength * 0.9}) brightness(${1 + baseStrength * 0.3})`;
+  ghostFxCtx.drawImage(baseSnapshot, 0, 0, width, height);
+  ghostFxCtx.restore();
+  ghostFxCtx.filter = 'none';
+
+  gctx.save();
+
+  // Pass 1 — vertical chromatic afterimages (the "V-Sync ghost"): the
+  // tinted picture haunts itself, sliding vertically with the phase.
+  gctx.globalCompositeOperation = 'screen';
+  gctx.globalAlpha = Math.min(0.3, (0.05 + ghost * 0.24) * globalFade);
+  gctx.filter = `blur(${(0.4 + ghost * 6).toFixed(1)}px)`;
+  gctx.drawImage(ghostFxCanvas, 0, -phaseY, width, height);
+  gctx.drawImage(ghostFxCanvas, 0, phaseY * 0.65, width, height);
+  gctx.filter = 'none';
+
+  // Pass 2 — fine colour-sheared ghost rows following the phase.
+  gctx.globalCompositeOperation = 'soft-light';
+  const rowGap = 3 + Math.floor((1 - baseStrength) * 6);
+  for (let y = -rowGap; y < height + rowGap; y += rowGap) {
+    const a = (0.02 + Math.random() * 0.06) * baseStrength * globalFade;
+    if (!(a > 0.004)) continue;
+    gctx.globalAlpha = a;
+    gctx.fillStyle = `hsla(${(hueDeg + 10 + Math.sin(t * 4 + y * 0.05) * 12 + 360) % 360}, 90%, 62%, 1)`;
+    gctx.fillRect(0, y - phaseY * 0.5, width, 1);
+  }
+
+  // Pass 3 — curve-style toning (Ghost Protocol Pass 4 treatment).
+  gctx.globalCompositeOperation = 'soft-light';
+  gctx.globalAlpha = Math.min(0.1, (0.015 + ghost * 0.06) * globalFade);
+  const curveGrad = gctx.createLinearGradient(0, 0, 0, height);
+  curveGrad.addColorStop(0, 'rgba(10, 40, 90, 1)');
+  curveGrad.addColorStop(0.5, 'rgba(140, 255, 210, 1)');
+  curveGrad.addColorStop(1, 'rgba(70, 10, 120, 1)');
+  gctx.fillStyle = curveGrad;
+  gctx.fillRect(0, 0, width, height);
+
+  // Pass 4 — cyan phosphor wash (Ghost Protocol Pass 5 treatment).
+  gctx.globalCompositeOperation = 'soft-light';
+  gctx.globalAlpha = Math.min(0.12, (0.02 + ghost * 0.09) * globalFade);
+  gctx.fillStyle = `hsla(${(palette.glow + Math.sin(t * 1.2) * 18 + 360) % 360}, 100%, 58%, 1)`;
+  gctx.fillRect(0, 0, width, height);
+
+  gctx.restore();
+  gctx.filter = 'none';
 }
 
 function renderGhostProtocol(now, baseSnapshot) {
@@ -2981,6 +3309,7 @@ function mainRenderLoop() {
     captureCanvasSnapshot(ghostCanvas);
 
     renderVsyncScan(now, ghostCanvas);
+    renderVsyncColorGhost(now, ghostCanvas);
     renderGhostProtocol(now, ghostCanvas);
 
     requestAnimationFrame(mainRenderLoop);
@@ -3133,7 +3462,8 @@ function generateNewRandomTargets() {
     randomTargetAlphas['global'] = 0.72 + Math.random() * 0.18;
   }
   ghostProtocolRandomTarget = 0.2 + Math.random() * 0.32;
-  vsyncScanRandomTarget = 0.2 + Math.random() * 0.32;
+  // Hard-off latch: the Randomize button must not resurrect the effect.
+  vsyncScanRandomTarget = vsyncScanHardOff ? 0 : 0.2 + Math.random() * 0.32;
   youtubeIframeVisibilityTarget = 0.88 + Math.random() * 0.09;
 }
 
@@ -3394,17 +3724,28 @@ function refreshEffectsLoop() {
       }
 
       if (vsyncScanSlider) {
-        const vsyncDirectionUp = vsyncScanRandomTarget >= vsyncScanLevel;
-        const vsyncRate = vsyncDirectionUp
-          ? vsyncScanInterpolationTempo.rise
-          : vsyncScanInterpolationTempo.fall;
-        const vsyncBurst = getBurstMultiplier(vsyncScanBurstTempo, vsyncDirectionUp, now);
-        const nextVsync = interpolateValue(vsyncScanLevel, vsyncScanRandomTarget, deltaSeconds, vsyncRate * vsyncScanSliderVelocityMultiplier * vsyncBurst, 0.0008, interpMode);
-        if (nextVsync.changed) {
-          vsyncScanLevel = nextVsync.value;
-          vsyncScanSlider.value = vsyncScanLevel.toFixed(3);
-          updateVsyncScanUi();
-          markContinualRandomizationMotion(now);
+        if (vsyncScanHardOff) {
+          // Hard OFF latch: pin the TV effect at zero — the auto systems
+          // get no say at all. The slider is left FREE: it drives the
+          // manual colour-ghost dial (vsyncGhostColorLevel) instead.
+          if (vsyncScanLevel !== 0) {
+            vsyncScanLevel = 0;
+            updateVsyncScanUi();
+          }
+          if (vsyncScanRandomTarget !== 0) vsyncScanRandomTarget = 0;
+        } else {
+          const vsyncDirectionUp = vsyncScanRandomTarget >= vsyncScanLevel;
+          const vsyncRate = vsyncDirectionUp
+            ? vsyncScanInterpolationTempo.rise
+            : vsyncScanInterpolationTempo.fall;
+          const vsyncBurst = getBurstMultiplier(vsyncScanBurstTempo, vsyncDirectionUp, now);
+          const nextVsync = interpolateValue(vsyncScanLevel, vsyncScanRandomTarget, deltaSeconds, vsyncRate * vsyncScanSliderVelocityMultiplier * vsyncBurst, 0.0008, interpMode);
+          if (nextVsync.changed) {
+            vsyncScanLevel = nextVsync.value;
+            vsyncScanSlider.value = vsyncScanLevel.toFixed(3);
+            updateVsyncScanUi();
+            markContinualRandomizationMotion(now);
+          }
         }
       }
 
@@ -3644,6 +3985,8 @@ const uiControlHoverTargets = [
   continualRandomizeBtn,
   aiWarpBtn,
   ghostProtocolBtn,
+  vsyncScanBtn,
+  document.getElementById('ghostBtnRack'),
   sliderContainer,
   document.getElementById('preset-toggle-btn'),
   document.getElementById('preset-dropdown-container'),
@@ -4149,7 +4492,8 @@ function getCurrentEffectSettings() {
     isContinuallyRandomizing: isContinuallyRandomizing,
     isAiWarpActive: isAiWarpActive, // Save the AI Warp state
     sliderLocks: { ...sliderLocks },
-    vsyncScanLevel: vsyncScanLevel
+    vsyncScanLevel: vsyncScanLevel,
+    vsyncGhostColorLevel: vsyncGhostColorLevel
   };
   return settings;
 } 
@@ -4182,13 +4526,23 @@ function applyEffectSettings(settings) {
     retargetContinualRandomization();
   }
 
-  // Restore V-Sync Scan level
+  // Restore V-Sync Scan level (a hard-off latch always wins over a preset,
+  // so loading a saved state cannot resurrect the TV geometry).
   if (Number.isFinite(settings.vsyncScanLevel)) {
-    vsyncScanLevel = clamp01(settings.vsyncScanLevel);
-    vsyncScanRandomTarget = vsyncScanLevel;
-    if (vsyncScanSlider) vsyncScanSlider.value = vsyncScanLevel.toFixed(3);
-    updateVsyncScanUi();
+    if (vsyncScanHardOff) {
+      vsyncScanLevel = 0;
+      vsyncScanRandomTarget = 0;
+    } else {
+      vsyncScanLevel = clamp01(settings.vsyncScanLevel);
+      vsyncScanRandomTarget = vsyncScanLevel;
+    }
   }
+  // The colour-ghost dial is a manual preference: presets always restore it,
+  // but it can never re-arm the TV geometry (hard-off latch still applies).
+  if (Number.isFinite(settings.vsyncGhostColorLevel)) {
+    vsyncGhostColorLevel = clamp01(settings.vsyncGhostColorLevel);
+  }
+  updateVsyncScanUi();
 
   // Restore AI Warp button state and effect
   isAiWarpActive = settings.isAiWarpActive ?? false;
@@ -4223,5 +4577,5 @@ function applyEffectSettings(settings) {
 } 
 
 </script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a2ec59a84cf5f794',t:'MTc4NzM0Mzc1MA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3266f03fac8f5e3',t:'MTc4Nzk1Mjc5OQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a2ec59a84cf5f794',t:'MTc4NzM0Mzc1MA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a326be8db973fffb',t:'MTc4Nzk1NjA1Nw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
