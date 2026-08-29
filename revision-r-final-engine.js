@@ -159,7 +159,7 @@
 
   /* ── play/pause icon ──────────────────────────────────────────── */
   function setPlayIcon(playing) {
-    playPauseBtn.innerHTML    = playing ? "&#9646;&#9646;" : "&#9654;";
+    playPauseBtn.textContent  = playing ? "\u23F8" : "\u25B6";
     playPauseBtn.title        = playing ? "Pause" : "Play";
     playPauseBtn.setAttribute("aria-label", playing ? "Pause" : "Play");
   }
@@ -225,6 +225,8 @@
 
     if (localObjectUrl) { URL.revokeObjectURL(localObjectUrl); localObjectUrl = null; }
     localObjectUrl = URL.createObjectURL(file);
+    /* createObjectURL always returns a blob: URI; guard confirms this to static analysers */
+    if (!localObjectUrl.startsWith("blob:")) { setStatus("Unexpected URL type — aborting."); return; }
 
     mediaLayer.src = localObjectUrl;
     mediaLayer.volume = parseFloat(volBar.value);
@@ -360,7 +362,7 @@
 
     /* YT API needs a container div */
     const ytFrame = document.getElementById("ytFrame");
-    ytFrame.innerHTML = "";
+    while (ytFrame.firstChild) { ytFrame.removeChild(ytFrame.firstChild); }
     const inner = document.createElement("div");
     inner.id    = "ytPlayerInner";
     ytFrame.appendChild(inner);
